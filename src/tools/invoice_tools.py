@@ -280,3 +280,112 @@ def search_invoices_above_amount(
 
     finally:
         connection.close()
+        
+
+def get_customer_invoices(
+    customer_name: str,
+) -> list[dict]:
+    """
+    Return all invoices belonging to a customer.
+
+    The customer is identified by name so the LLM
+    does not need to know database IDs.
+    """
+
+    connection = get_connection()
+
+    try:
+        with connection.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    i.invoice_number,
+                    i.invoice_date,
+                    i.subtotal,
+                    i.gst,
+                    i.total,
+                    i.status
+
+                FROM invoices i
+
+                JOIN customers c
+                    ON c.id = i.customer_id
+
+                WHERE c.name ILIKE %s
+
+                ORDER BY i.invoice_date DESC;
+                """,
+                (f"%{customer_name}%",),
+            )
+
+            rows = cursor.fetchall()
+
+            invoices = []
+
+            for row in rows:
+                invoices.append(
+                    {
+                        "invoice_number": row[0],
+                        "invoice_date": str(row[1]),
+                        "subtotal": float(row[2]),
+                        "gst": float(row[3]),
+                        "total": float(row[4]),
+                        "status": row[5],
+                    }
+                )
+
+            return invoices
+
+    finally:
+        connection.close()
+        
+        
+def get_highest_invoice() -> dict | None:
+    """
+    Return the invoice with the highest total value.
+
+    The database performs the sorting, so the LLM does not
+    need to inspect all invoices and decide which one is largest.
+    """
+
+    connection = get_connection()
+
+    try:
+        with connection.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    i.invoice_number,
+                    i.invoice_date,
+                    c.name AS customer_name,
+                    i.total,
+                    i.status
+
+                FROM invoices i
+
+                JOIN customers c
+                    ON c.id = i.customer_id
+
+                ORDER BY i.total DESC
+
+                LIMIT 1;
+                """
+            )
+
+            row = cursor.fetchone()
+
+            if row is None:
+                return None
+
+            return {
+                "invoice_number": row[0],
+                "invoice_date": str(row[1]),
+                "customer_name": row[2],
+                "total": float(row[3]),
+                "status": row[4],
+            }
+
+    finally:
+        connection.close()

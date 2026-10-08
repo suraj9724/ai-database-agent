@@ -1,5 +1,5 @@
 from database.connection import get_connection
-
+from tools.invoice_tools import get_customer_invoices
 
 def get_revenue(
     start_date: str,
@@ -234,6 +234,165 @@ def get_customer_outstanding_by_name(
                 "customer_id": row[0],
                 "customer_name": row[1],
                 "outstanding_amount": float(row[2]),
+            }
+
+    finally:
+        connection.close()
+        
+        
+def get_customer_outstanding_details(
+    customer_name: str,
+) -> dict | None:
+    """
+    Return both the customer's outstanding amount
+    and the invoices that make up that amount.
+
+    This is a higher-level business operation.
+
+    Internally it combines:
+        1. Customer outstanding balance
+        2. Customer invoice list
+
+    Keeping this logic in Python means the LLM does not
+    need to coordinate multiple database tools itself.
+    """
+
+    # ---------------------------------------------
+    # Get the customer's outstanding balance.
+    # ---------------------------------------------
+
+    outstanding = get_customer_outstanding_by_name(
+        customer_name
+    )
+
+    if outstanding is None:
+        return None
+
+    # ---------------------------------------------
+    # Get all invoices belonging to the customer.
+    # ---------------------------------------------
+
+    invoices = get_customer_invoices(
+        customer_name
+    )
+
+    # ---------------------------------------------
+    # Return one clean result to the LLM.
+    # ---------------------------------------------
+
+    return {
+    "customer_id": outstanding["customer_id"],
+    "customer_name": outstanding["customer_name"],
+    "outstanding_amount": outstanding["outstanding_amount"],
+
+    # These are raw database values.
+    # The LLM should present them exactly as returned.
+    "invoices": [
+        {
+            "invoice_number": invoice["invoice_number"],
+            "invoice_date": invoice["invoice_date"],
+            "total": invoice["total"],
+            "status": invoice["status"],
+        }
+        for invoice in invoices
+    ],
+}
+    
+
+def get_total_unpaid_amount() -> dict:
+    """
+    Calculate the total value of unpaid invoices.
+
+    The calculation is performed by PostgreSQL rather than
+    asking the LLM to add invoice amounts.
+    """
+
+    connection = get_connection()
+
+    try:
+        with connection.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    COALESCE(SUM(total), 0)
+
+                FROM invoices
+
+                WHERE status = 'unpaid';
+                """
+            )
+
+            row = cursor.fetchone()
+
+            return {
+                "total_unpaid_amount": float(row[0])
+            }
+
+    finally:
+        connection.close()
+        
+        
+def get_customer_payments(
+    customer_name: str,
+) -> dict | None:
+    """
+    Return the payments received from a specific customer.
+
+    This is different from get_revenue(), which calculates
+    revenue for a date range across all customers.
+    """
+
+    connection = get_connection()
+
+    try:
+        with connection.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    c.id,
+                    c.name,
+                    COALESCE(SUM(p.amount), 0) AS total_received
+
+                FROM customers c
+
+                LEFT JOIN invoices i
+                    ON i.customer_id = c.id
+
+                LEFT JOIN payments p
+                    ON p.invoice_id = i.id
+
+                WHERE c.name ILIKE %s
+
+                GROUP BY c.id, c.name;
+                """,
+                (f"%{customer_name}%",),
+            )
+
+            rows = cursor.fetchall()
+
+            if not rows:
+                return None
+
+            if len(rows) > 1:
+                return {
+                    "error": "Multiple customers matched the supplied name.",
+                    "matches": [
+                        {
+                            "customer_id": row[0],
+                            "customer_name": row[1],
+                        }
+                        for row in rows
+                    ],
+                }
+
+            row = rows[0]
+
+            return {
+                "customer_id": row[0],
+                "customer_name": row[1],
+                "total_received": float(row[2]),
             }
 
     finally:

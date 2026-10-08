@@ -29,25 +29,40 @@ class DatabaseAgent:
 
     def run(self, user_message: str) -> str:
         """
-        Process a user request.
+        Process a user request using an iterative tool-calling loop.
 
-        The agent may:
-            1. Ask the LLM what tool to use.
-            2. Execute that tool.
-            3. Give the result back to the LLM.
-            4. Return the final natural-language answer.
+        The LLM can request multiple tools across multiple turns
+        before producing the final answer.
         """
 
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are a business data assistant. "
+                    "You are a business data assistant.\n\n"
+
                     "Use the available tools to answer questions "
                     "about invoices, customers, payments, revenue, "
-                    "and outstanding amounts. "
-                    "Never invent database information. "
-                    "If database information is required, use a tool."
+                    "and outstanding amounts.\n\n"
+
+                    "IMPORTANT RULES:\n"
+                    "1. Never invent database information.\n"
+                    "2. Only state facts returned by tools.\n"
+                    "3. If the user asks for information that "
+                    "requires multiple pieces of data, call all "
+                    "necessary tools before answering.\n"
+                    "4. Never create invoice numbers, amounts, "
+                    "customers, dates, or other business data "
+                    "yourself.\n"
+                    "5. If the available tools cannot answer the "
+                    "question, clearly say so.\n"
+                    "6. NEVER perform arithmetic on financial values returned "
+                    "by tools. Use the exact numbers returned by the tools. "
+                    "Do not recalculate subtotal, GST, invoice total, outstanding "
+                    "amount, payment amount, or any other financial value.\n"
+                    "7. When listing database records, copy identifiers and "
+                    "numeric values exactly as returned by the tool. "
+                    "Never change, round, combine, or reconstruct them.\n"
                 ),
             },
             {
@@ -57,78 +72,92 @@ class DatabaseAgent:
         ]
 
         # --------------------------------------------------
-        # Ask the LLM what it wants to do.
+        # Keep asking the LLM what it wants to do until
+        # it decides that it has enough information to answer.
         # --------------------------------------------------
 
-        response = self.client.chat(
-            model=self.model,
-            messages=messages,
-            tools=TOOL_DEFINITIONS,
-        )
+        while True:
 
-        assistant_message = response["message"]
-
-        # Add the LLM response to the conversation.
-        messages.append(assistant_message)
-
-        # --------------------------------------------------
-        # Check whether the LLM requested a tool.
-        # --------------------------------------------------
-
-        tool_calls = assistant_message.get("tool_calls", [])
-
-        if not tool_calls:
-            # The LLM answered without needing the database.
-            return assistant_message["content"]
-
-        # --------------------------------------------------
-        # Execute every requested tool.
-        # --------------------------------------------------
-
-        for tool_call in tool_calls:
-
-            function_name = tool_call["function"]["name"]
-
-            arguments = tool_call["function"].get(
-                "arguments",
-                {},
+            response = self.client.chat(
+                model=self.model,
+                messages=messages,
+                tools=TOOL_DEFINITIONS,
             )
 
-            # Ollama may return arguments as a JSON string.
-            if isinstance(arguments, str):
-                arguments = json.loads(arguments)
+            assistant_message = response["message"]
 
-            function = TOOL_FUNCTIONS.get(function_name)
+            # Add the assistant's message to the conversation.
+            messages.append(assistant_message)
 
-            if function is None:
-                raise ValueError(
-                    f"Unknown tool requested: {function_name}"
+            # --------------------------------------------------
+            # Check whether the LLM requested any tools.
+            # --------------------------------------------------
+
+            tool_calls = assistant_message.get(
+                "tool_calls",
+                [],
+            )
+
+            # No tool call means the LLM has produced
+            # its final answer.
+            if not tool_calls:
+                return assistant_message["content"]
+
+            # --------------------------------------------------
+            # Execute every tool requested in this turn.
+            # --------------------------------------------------
+
+            for tool_call in tool_calls:
+
+                function_name = tool_call["function"]["name"]
+
+                arguments = tool_call["function"].get(
+                    "arguments",
+                    {},
                 )
 
-            # Execute our controlled Python function.
-            result = function(**arguments)
+                # Ollama may return arguments as a JSON string.
+                if isinstance(arguments, str):
+                    arguments = json.loads(arguments)
 
-            # Send the tool result back to the LLM.
-            messages.append(
-                {
-                    "role": "tool",
-                    "name": function_name,
-                    "content": json.dumps(
-                        result,
-                        default=str,
-                    ),
-                }
-            )
+                function = TOOL_FUNCTIONS.get(function_name)
 
-        # --------------------------------------------------
-        # Ask the LLM to turn the database result into
-        # a natural-language answer.
-        # --------------------------------------------------
+                # Temporary debugging while we learn the agent.
+                print(
+                    f"\nTOOL: {function_name}"
+                )
+                print(
+                    f"ARGUMENTS: {arguments}"
+                )
 
-        final_response = self.client.chat(
-            model=self.model,
-            messages=messages,
-            tools=TOOL_DEFINITIONS,
-        )
+                if function is None:
+                    result = {
+                        "error": f"Unknown tool requested: {function_name}"
+                    }
+                else:
+                    # --------------------------------------------------
+                    # Execute the controlled Python function.
+                    # --------------------------------------------------
+                    try:
+                        result = function(**arguments)
+                    except Exception as e:
+                        result = {"error": str(e)}
 
-        return final_response["message"]["content"]
+                print(
+                    f"RESULT: {result}"
+                )
+
+                # --------------------------------------------------
+                # Give the tool result back to the LLM.
+                # --------------------------------------------------
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "name": function_name,
+                        "content": json.dumps(
+                            result,
+                            default=str,
+                        ),
+                    }
+                )

@@ -13,7 +13,15 @@ def main():
         # "Which customer has the highest invoice value?",
         # "How many invoices does TechNova Solutions have?",
         # "What is the average invoice value?",
-        "Can you tell me how much money TechNova Solutions still owes us?",
+        # "Can you tell me how much money TechNova Solutions still owes us?",
+        # "How much does TechNova Solutions owe us, and which invoices make up that amount?"
+        "Which customer has the highest invoice?",
+        "How many invoices does TechNova Solutions have?",
+        "What is the total value of unpaid invoices?",
+        "Show me all invoices for TechNova Solutions.",
+        "How much did we receive from BlueSky Enterprises?",
+        "Which invoices are partially paid?",
+        
     ]
 
     for question in questions:
