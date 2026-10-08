@@ -56,6 +56,11 @@ def collect_tool_values(tool_results: list[Any]) -> set[float]:
                     "gst",
                     "outstanding_amount",
                     "payment_amount",
+                    "total_received",
+                    "total_unpaid_amount",
+                    "revenue",
+                    "total_amount",
+                    "amount_paid",
                 }:
                     if isinstance(item, (int, float)):
                         values.add(float(item))

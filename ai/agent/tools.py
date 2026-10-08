@@ -15,6 +15,8 @@ from tools.payment_tools import (
     get_customer_outstanding_details,
     get_total_unpaid_amount,
     get_customer_payments,
+    get_customer_with_highest_outstanding,
+    get_highest_invoice_for_customer,
 )
 
 
@@ -264,27 +266,68 @@ TOOL_DEFINITIONS = [
     },
 },
     {
-    "type": "function",
-    "function": {
-        "name": "get_customer_payments",
-        "description": (
-            "Calculate how much money has been received from "
-            "a specific customer. Use this when the user asks "
-            "how much a particular customer has paid or how "
-            "much was received from that customer."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "customer_name": {
-                    "type": "string",
-                    "description": "Customer name.",
-                }
+        "type": "function",
+        "function": {
+            "name": "get_customer_payments",
+            "description": (
+                "Calculate how much money has been received from "
+                "a specific customer. Use this when the user asks "
+                "how much a particular customer has paid or how "
+                "much was received from that customer."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "customer_name": {
+                        "type": "string",
+                        "description": "Customer name.",
+                    }
+                },
+                "required": ["customer_name"],
             },
-            "required": ["customer_name"],
         },
     },
-},
+    {
+        "type": "function",
+        "function": {
+            "name": "get_customer_with_highest_outstanding",
+            "description": (
+                "Find the customer with the highest total outstanding balance across all invoices. "
+                "Use this when the user asks which customer owes the most money, who has the "
+                "largest debt/outstanding amount, or which customer to prioritize for collections."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_highest_invoice_for_customer",
+            "description": (
+                "Find the single invoice with the highest outstanding balance for a specific "
+                "customer. Use this when the user asks for a customer's largest unpaid invoice, "
+                "highest open balance, or which invoice has the most debt for that customer."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "customer_name": {
+                        "type": "string",
+                        "description": "The customer's name (e.g. 'TechNova Solutions').",
+                    },
+                    "customer_id": {
+                        "type": "integer",
+                        "description": "The customer ID if known.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -305,4 +348,6 @@ TOOL_FUNCTIONS = {
     "get_highest_invoice": get_highest_invoice,
     "get_total_unpaid_amount": get_total_unpaid_amount,
     "get_customer_payments": get_customer_payments,
-}
+    "get_customer_with_highest_outstanding": get_customer_with_highest_outstanding,
+    "get_highest_invoice_for_customer": get_highest_invoice_for_customer,
+}

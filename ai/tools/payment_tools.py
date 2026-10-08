@@ -397,3 +397,212 @@ def get_customer_payments(
 
     finally:
         connection.close()
+        
+def get_customer_with_highest_outstanding() -> dict | None:
+    """
+    Find the customer with the highest outstanding balance.
+
+    This is useful for:
+        - Prioritizing collections efforts
+        - Understanding who owes the most
+        - Reporting on key accounts
+    """
+
+    connection = get_connection()
+
+    try:
+        with connection.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    c.id,
+                    c.name,
+                    COALESCE(
+                        SUM(
+                            i.total -
+                            COALESCE(
+                                (
+                                    SELECT SUM(p.amount)
+                                    FROM payments p
+                                    WHERE p.invoice_id = i.id
+                                ),
+                                0
+                            )
+                        ),
+                        0
+                    ) AS outstanding
+
+                FROM customers c
+
+                LEFT JOIN invoices i
+                    ON i.customer_id = c.id
+
+                GROUP BY c.id, c.name
+
+                ORDER BY outstanding DESC
+
+                LIMIT 1;
+                """
+            )
+
+            row = cursor.fetchone()
+
+            if row is None:
+                return None
+
+            return {
+                "customer_id": row[0],
+                "customer_name": row[1],
+                "outstanding_amount": float(row[2]),
+            }
+
+    finally:
+        connection.close()
+        
+        
+def get_highest_invoice_for_customer(
+    customer_id: int | None = None,
+    customer_name: str | None = None,
+) -> dict | None:
+    """
+    Find the single invoice with the highest outstanding balance
+    for a specific customer.
+
+    Supports lookup either by customer_id or customer_name.
+
+    Returns:
+        - The highest invoice (invoice number, total, amount paid, outstanding balance)
+        - The customer's ID and name
+
+    This is useful for:
+        - Focusing collections on a specific invoice
+        - Understanding the largest open debt items per customer
+        - Prioritizing payment recovery efforts
+    """
+
+    if customer_id is None and not customer_name:
+        return {
+            "error": "Either customer_id or customer_name must be provided."
+        }
+
+    connection = get_connection()
+
+    try:
+        with connection.cursor() as cursor:
+
+            # ----------------------------------------
+            # Resolve customer if customer_name is provided
+            # ----------------------------------------
+            if customer_id is None and customer_name:
+                cursor.execute(
+                    """
+                    SELECT id, name
+                    FROM customers
+                    WHERE name ILIKE %s
+                    ORDER BY name;
+                    """,
+                    (f"%{customer_name}%",),
+                )
+
+                cust_rows = cursor.fetchall()
+
+                if not cust_rows:
+                    return None
+
+                if len(cust_rows) > 1:
+                    return {
+                        "error": "Multiple customers matched the supplied name.",
+                        "matches": [
+                            {
+                                "customer_id": r[0],
+                                "customer_name": r[1],
+                            }
+                            for r in cust_rows
+                        ],
+                    }
+
+                customer_id = cust_rows[0][0]
+                customer_name = cust_rows[0][1]
+
+            elif customer_id is not None and not customer_name:
+                cursor.execute(
+                    """
+                    SELECT id, name
+                    FROM customers
+                    WHERE id = %s;
+                    """,
+                    (customer_id,),
+                )
+
+                customer_row = cursor.fetchone()
+
+                if customer_row is None:
+                    return None
+
+                customer_name = customer_row[1]
+
+            # ----------------------------------------
+            # Find the highest outstanding invoice
+            # ----------------------------------------
+            cursor.execute(
+                """
+                SELECT
+                    i.id,
+                    i.invoice_number,
+                    i.total,
+
+                    COALESCE(
+                        SUM(p.amount)
+                    , 0) AS total_paid,
+
+                    i.total -
+                    COALESCE(
+                        SUM(p.amount)
+                    , 0) AS outstanding_amount
+
+                FROM invoices i
+
+                LEFT JOIN payments p
+                    ON p.invoice_id = i.id
+
+                WHERE i.customer_id = %s
+
+                GROUP BY i.id
+
+                ORDER BY outstanding_amount DESC
+
+                LIMIT 1;
+                """,
+                (customer_id,),
+            )
+
+            invoice_row = cursor.fetchone()
+
+            if invoice_row is None:
+                return {
+                    "customer_id": customer_id,
+                    "customer_name": customer_name,
+                    "highest_invoice": None,
+                    "message": "No invoices found for this customer.",
+                }
+
+            # ----------------------------------------
+            # Build the result
+            # ----------------------------------------
+            return {
+                "customer_id": customer_id,
+                "customer_name": customer_name,
+
+                "highest_invoice": {
+                    "invoice_id": invoice_row[0],
+                    "invoice_number": invoice_row[1],
+                    "total": float(invoice_row[2]),
+                    "total_amount": float(invoice_row[2]),
+                    "amount_paid": float(invoice_row[3]),
+                    "outstanding_amount": float(invoice_row[4]),
+                }
+            }
+
+    finally:
+        connection.close()
