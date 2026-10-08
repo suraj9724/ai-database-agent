@@ -3,6 +3,11 @@ from pydantic import BaseModel
 
 from agent.agent import DatabaseAgent
 
+from tools.conversation_tools import (
+    create_conversation,
+    save_message,
+    get_conversation_history,
+)
 
 # --------------------------------------------------
 # Create FastAPI application
@@ -30,7 +35,6 @@ agent = DatabaseAgent()
 # Later we can move this to Redis/PostgreSQL.
 # --------------------------------------------------
 
-conversations: dict[str, list[dict]] = {}
 
 
 # --------------------------------------------------
@@ -57,36 +61,35 @@ class ChatResponse(BaseModel):
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
 
-    # Get existing conversation history.
-    history = conversations.get(
-        request.conversation_id,
-        []
+    # Make sure the conversation exists.
+    create_conversation(
+        request.conversation_id
     )
 
-    # Run the agent with the previous conversation.
+    # Load previous messages from PostgreSQL.
+    history = get_conversation_history(
+        request.conversation_id
+    )
+
+    # Run the AI agent with conversation history.
     answer = agent.run(
         user_message=request.message,
         history=history,
     )
 
     # Store the user's message.
-    history.append(
-        {
-            "role": "user",
-            "content": request.message,
-        }
+    save_message(
+        conversation_id=request.conversation_id,
+        role="user",
+        content=request.message,
     )
 
-    # Store the assistant's response.
-    history.append(
-        {
-            "role": "assistant",
-            "content": answer,
-        }
+    # Store the AI response.
+    save_message(
+        conversation_id=request.conversation_id,
+        role="assistant",
+        content=answer,
     )
-
-    # Save the updated conversation.
-    conversations[request.conversation_id] = history
 
     return ChatResponse(
         answer=answer

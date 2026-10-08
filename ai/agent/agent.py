@@ -112,6 +112,8 @@ class DatabaseAgent:
         # --------------------------------------------------
 
         tool_results = []
+        validation_retries = 0
+        MAX_VALIDATION_RETRIES = 2   
         while True:
 
             response = self.client.chat(
@@ -155,18 +157,37 @@ class DatabaseAgent:
                     print("\nVALIDATION FAILED")
                     print(f"Invalid financial values: {invalid_values}")
 
-                    # Ask the LLM to correct its answer using the exact
-                    # structured database results already returned by tools.
+                    validation_retries += 1
+
+                    # --------------------------------------------------
+                    # Stop retrying if the model continues producing
+                    # incorrect financial values.
+                    # --------------------------------------------------
+
+                    if validation_retries > MAX_VALIDATION_RETRIES:
+
+                        return (
+                            "I was unable to generate a reliable response "
+                            "from the database results. Please try the "
+                            "question again."
+                        )
+
                     messages.append(
                         {
                             "role": "user",
                             "content": (
-                                "Your previous answer contained an incorrect "
-                                "financial value.\n\n"
-                                "Rewrite your answer using ONLY the exact "
-                                "financial values from the tool results.\n"
-                                "Do not calculate or modify any amount.\n"
-                                "Do not mention this correction process.\n"
+                                "Your previous answer contained incorrect "
+                                "financial values.\n\n"
+
+                                "Use ONLY the exact financial values returned "
+                                "by the database tools.\n\n"
+
+                                "The correct values are already present in "
+                                "the tool results in this conversation.\n\n"
+
+                                "Do not calculate, estimate, round, modify, "
+                                "or reconstruct any financial value.\n\n"
+
                                 "Return only the final answer for the user."
                             ),
                         }

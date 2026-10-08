@@ -84,3 +84,32 @@ CREATE TABLE IF NOT EXISTS payments (
         REFERENCES invoices(id)
         ON DELETE CASCADE
 );
+
+-- --------------------------------------------------
+-- Conversations
+-- Stores each chat session.
+-- --------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id SERIAL PRIMARY KEY,
+    conversation_id VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+-- --------------------------------------------------
+-- Conversation messages
+-- Stores the messages belonging to a conversation.
+-- --------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+    id SERIAL PRIMARY KEY,
+    conversation_id VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (conversation_id)
+        REFERENCES conversations(conversation_id)
+        ON DELETE CASCADE
+);
