@@ -6,6 +6,7 @@ from agent.tools import (
     TOOL_DEFINITIONS,
     TOOL_FUNCTIONS,
 )
+from agent.validator import validate_financial_values
 
 
 class DatabaseAgent:
@@ -103,7 +104,14 @@ class DatabaseAgent:
         # Keep asking the LLM what it wants to do until
         # it decides that it has enough information to answer.
         # --------------------------------------------------
+        # --------------------------------------------------
+        # Store all tool results produced during this run.
+        #
+        # These results are the source of truth when validating
+        # the LLM's final response.
+        # --------------------------------------------------
 
+        tool_results = []
         while True:
 
             response = self.client.chat(
@@ -129,7 +137,44 @@ class DatabaseAgent:
             # No tool call means the LLM has produced
             # its final answer.
             if not tool_calls:
-                return assistant_message["content"]
+
+                final_answer = assistant_message["content"]
+
+                # --------------------------------------------------
+                # Validate financial values before returning the
+                # answer to the user.
+                # --------------------------------------------------
+
+                is_valid, invalid_values = validate_financial_values(
+                    final_answer,
+                    tool_results,
+                )
+
+                if not is_valid:
+
+                    print("\nVALIDATION FAILED")
+                    print(f"Invalid financial values: {invalid_values}")
+
+                    # Ask the LLM to correct its answer using the exact
+                    # structured database results already returned by tools.
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your previous answer contained an incorrect "
+                                "financial value.\n\n"
+                                "Rewrite your answer using ONLY the exact "
+                                "financial values from the tool results.\n"
+                                "Do not calculate or modify any amount.\n"
+                                "Do not mention this correction process.\n"
+                                "Return only the final answer for the user."
+                            ),
+                        }
+                    )
+
+                    continue
+
+                return final_answer
 
             # --------------------------------------------------
             # Execute every tool requested in this turn.
@@ -174,7 +219,9 @@ class DatabaseAgent:
                 print(
                     f"RESULT: {result}"
                 )
-
+                # Keep the original structured result so we can
+                # validate the LLM's final answer later.
+                tool_results.append(result)
                 # --------------------------------------------------
                 # Give the tool result back to the LLM.
                 # --------------------------------------------------
