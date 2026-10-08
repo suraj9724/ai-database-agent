@@ -9,18 +9,28 @@ from agent.agent import DatabaseAgent
 # --------------------------------------------------
 
 app = FastAPI(
-    title="AI Database Agent API",
+    title="AI Database Agent API"
 )
 
 
 # --------------------------------------------------
-# Create the agent once when the API starts.
-#
-# We don't want to create a new Ollama client
-# for every request.
+# Create the AI agent once when the API starts.
 # --------------------------------------------------
 
 agent = DatabaseAgent()
+
+
+# --------------------------------------------------
+# Store conversation history.
+#
+# Key   -> conversation ID
+# Value -> list of previous messages
+#
+# This is intentionally simple for Project 4.
+# Later we can move this to Redis/PostgreSQL.
+# --------------------------------------------------
+
+conversations: dict[str, list[dict]] = {}
 
 
 # --------------------------------------------------
@@ -28,6 +38,7 @@ agent = DatabaseAgent()
 # --------------------------------------------------
 
 class ChatRequest(BaseModel):
+    conversation_id: str
     message: str
 
 
@@ -46,10 +57,37 @@ class ChatResponse(BaseModel):
 @app.post("/api/chat", response_model=ChatResponse)
 def chat(request: ChatRequest):
 
-    # Send the user's question to the AI agent.
-    answer = agent.run(request.message)
+    # Get existing conversation history.
+    history = conversations.get(
+        request.conversation_id,
+        []
+    )
 
-    # Return a clean JSON response to the frontend.
+    # Run the agent with the previous conversation.
+    answer = agent.run(
+        user_message=request.message,
+        history=history,
+    )
+
+    # Store the user's message.
+    history.append(
+        {
+            "role": "user",
+            "content": request.message,
+        }
+    )
+
+    # Store the assistant's response.
+    history.append(
+        {
+            "role": "assistant",
+            "content": answer,
+        }
+    )
+
+    # Save the updated conversation.
+    conversations[request.conversation_id] = history
+
     return ChatResponse(
         answer=answer
     )

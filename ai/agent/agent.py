@@ -27,13 +27,21 @@ class DatabaseAgent:
             host="http://localhost:11434"
         )
 
-    def run(self, user_message: str) -> str:
+    def run(
+        self, 
+        user_message: str,
+        history: list[dict] | None = None
+    ) -> str:
         """
         Process a user request using an iterative tool-calling loop.
 
         The LLM can request multiple tools across multiple turns
         before producing the final answer.
         """
+
+        # --------------------------------------------------
+        # Start with previous conversation history if provided.
+        # --------------------------------------------------
 
         messages = [
             {
@@ -56,20 +64,40 @@ class DatabaseAgent:
                     "yourself.\n"
                     "5. If the available tools cannot answer the "
                     "question, clearly say so.\n"
-                    "6. NEVER perform arithmetic on financial values returned "
-                    "by tools. Use the exact numbers returned by the tools. "
-                    "Do not recalculate subtotal, GST, invoice total, outstanding "
-                    "amount, payment amount, or any other financial value.\n"
-                    "7. When listing database records, copy identifiers and "
-                    "numeric values exactly as returned by the tool. "
-                    "Never change, round, combine, or reconstruct them.\n"
-                ),
-            },
+                    "6. NEVER perform arithmetic on financial values "
+                    "returned by tools. Use the exact numbers returned "
+                    "by the tools.\n"
+                    "7. When listing database records, copy identifiers "
+                    "and numeric values exactly as returned by the tool.\n"
+
+                    "8. When the user asks which invoices make up a "
+                    "customer's outstanding amount, use "
+                    "get_customer_outstanding_details().\n"
+
+                    "9. If a follow-up question refers to information "
+                    "from the previous conversation, use the conversation "
+                    "context to identify the customer or subject before "
+                    "selecting a tool.\n"
+
+                    "10. Do not search for invoices by amount when the "
+                    "user asks which invoices make up an outstanding "
+                    "balance. Retrieve the customer's outstanding "
+                    "details instead.\n"
+        ),
+            }
+        ]
+
+        # Add previous conversation messages.
+        if history:
+            messages.extend(history)
+
+        # Add the new user question.
+        messages.append(
             {
                 "role": "user",
                 "content": user_message,
-            },
-        ]
+            }
+        )
 
         # --------------------------------------------------
         # Keep asking the LLM what it wants to do until
@@ -160,4 +188,4 @@ class DatabaseAgent:
                             default=str,
                         ),
                     }
-                )
+                )
