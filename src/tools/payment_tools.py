@@ -94,3 +94,147 @@ def get_outstanding_amount() -> dict:
 
     finally:
         connection.close()
+        
+def get_customer_outstanding(customer_id: int) -> dict | None:
+    """
+    Calculate the outstanding balance for one customer.
+
+    Outstanding balance is:
+
+        invoice total - payments received
+
+    across all invoices belonging to that customer.
+    """
+
+    connection = get_connection()
+
+    try:
+        with connection.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    c.id,
+                    c.name,
+
+                    COALESCE(
+                        SUM(
+                            i.total -
+                            COALESCE(
+                                (
+                                    SELECT SUM(p.amount)
+                                    FROM payments p
+                                    WHERE p.invoice_id = i.id
+                                ),
+                                0
+                            )
+                        ),
+                        0
+                    ) AS outstanding
+
+                FROM customers c
+
+                LEFT JOIN invoices i
+                    ON i.customer_id = c.id
+
+                WHERE c.id = %s
+
+                GROUP BY c.id, c.name;
+                """,
+                (customer_id,),
+            )
+
+            row = cursor.fetchone()
+
+            if row is None:
+                return None
+
+            return {
+                "customer_id": row[0],
+                "customer_name": row[1],
+                "outstanding_amount": float(row[2]),
+            }
+
+    finally:
+        connection.close()
+        
+        
+def get_customer_outstanding_by_name(
+    customer_name: str,
+) -> dict | None:
+    """
+    Calculate the outstanding balance for a customer
+    using their name.
+
+    This combines customer lookup and outstanding calculation
+    into one controlled business operation.
+    """
+
+    connection = get_connection()
+
+    try:
+        with connection.cursor() as cursor:
+
+            cursor.execute(
+                """
+                SELECT
+                    c.id,
+                    c.name,
+
+                    COALESCE(
+                        SUM(
+                            i.total -
+                            COALESCE(
+                                (
+                                    SELECT SUM(p.amount)
+                                    FROM payments p
+                                    WHERE p.invoice_id = i.id
+                                ),
+                                0
+                            )
+                        ),
+                        0
+                    ) AS outstanding
+
+                FROM customers c
+
+                LEFT JOIN invoices i
+                    ON i.customer_id = c.id
+
+                WHERE c.name ILIKE %s
+
+                GROUP BY c.id, c.name
+
+                ORDER BY c.name;
+                """,
+                (f"%{customer_name}%",),
+            )
+
+            rows = cursor.fetchall()
+
+            if not rows:
+                return None
+
+            # For now, require a unique customer match.
+            if len(rows) > 1:
+                return {
+                    "error": "Multiple customers matched the supplied name.",
+                    "matches": [
+                        {
+                            "customer_id": row[0],
+                            "customer_name": row[1],
+                        }
+                        for row in rows
+                    ],
+                }
+
+            row = rows[0]
+
+            return {
+                "customer_id": row[0],
+                "customer_name": row[1],
+                "outstanding_amount": float(row[2]),
+            }
+
+    finally:
+        connection.close()

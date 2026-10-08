@@ -1,62 +1,30 @@
-from tools.invoice_tools import (
-    get_invoice,
-    search_invoices,
-    search_invoices_above_amount,
-)
-
-from tools.customer_tools import search_customer
-
-from tools.payment_tools import (
-    get_revenue,
-    get_outstanding_amount,
-)
+from agent.agent import DatabaseAgent
 
 
 def main():
 
-    print("\n--- GET INVOICE ---")
+    agent = DatabaseAgent()
 
-    print(
-        get_invoice("INV-1001")
-    )
+    questions = [
+        # "Show me invoice INV-1001.",
+        # "Show me all unpaid invoices.",
+        # "How much revenue did we receive in September 2026?",
+        # "What is the total outstanding amount?",
+        # "Which customer has the highest invoice value?",
+        # "How many invoices does TechNova Solutions have?",
+        # "What is the average invoice value?",
+        "Can you tell me how much money TechNova Solutions still owes us?",
+    ]
 
+    for question in questions:
 
-    print("\n--- UNPAID INVOICES ---")
+        print("\n" + "=" * 60)
+        print(f"USER: {question}")
+        print("=" * 60)
 
-    print(
-        search_invoices("unpaid")
-    )
+        answer = agent.run(question)
 
-
-    print("\n--- INVOICES ABOVE 40000 ---")
-
-    print(
-        search_invoices_above_amount(40000)
-    )
-
-
-    print("\n--- SEARCH CUSTOMER ---")
-
-    print(
-        search_customer("TechNova")
-    )
-
-
-    print("\n--- SEPTEMBER REVENUE ---")
-
-    print(
-        get_revenue(
-            "2026-09-01",
-            "2026-09-30",
-        )
-    )
-
-
-    print("\n--- OUTSTANDING ---")
-
-    print(
-        get_outstanding_amount()
-    )
+        print(f"AGENT: {answer}")
 
 
 if __name__ == "__main__":

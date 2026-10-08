@@ -1,0 +1,200 @@
+from tools.invoice_tools import (
+    get_invoice,
+    search_invoices,
+    search_invoices_above_amount,
+)
+
+from tools.customer_tools import search_customer
+
+from tools.payment_tools import (
+    get_revenue,
+    get_outstanding_amount,
+    get_customer_outstanding_by_name
+)
+
+
+# --------------------------------------------------
+# Tool definitions exposed to the LLM
+# --------------------------------------------------
+#
+# These descriptions tell the LLM:
+#
+# 1. What the tool does
+# 2. When it should use it
+# 3. What arguments it needs
+#
+# The LLM does NOT receive database credentials
+# or SQL queries.
+# --------------------------------------------------
+
+TOOL_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_invoice",
+            "description": (
+                "Get complete information about a specific "
+                "invoice using its invoice number."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "invoice_number": {
+                        "type": "string",
+                        "description": "The invoice number, such as INV-1001.",
+                    }
+                },
+                "required": ["invoice_number"],
+            },
+        },
+    },
+
+    {
+        "type": "function",
+        "function": {
+            "name": "search_invoices",
+            "description": (
+                "Find invoices by payment status. "
+                "Use this for paid, unpaid, or partially paid invoices."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "paid",
+                            "unpaid",
+                            "partially_paid",
+                        ],
+                        "description": "Invoice payment status.",
+                    }
+                },
+                "required": ["status"],
+            },
+        },
+    },
+
+    {
+        "type": "function",
+        "function": {
+            "name": "search_invoices_above_amount",
+            "description": (
+                "Find invoices whose total is greater than "
+                "a specified amount."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "amount": {
+                        "type": "number",
+                        "description": "Minimum invoice total.",
+                    }
+                },
+                "required": ["amount"],
+            },
+        },
+    },
+
+    {
+        "type": "function",
+        "function": {
+            "name": "search_customer",
+            "description": (
+                "Search for customers using their name."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "customer_name": {
+                        "type": "string",
+                        "description": "Customer name or partial name.",
+                    }
+                },
+                "required": ["customer_name"],
+            },
+        },
+    },
+
+    {
+        "type": "function",
+        "function": {
+            "name": "get_revenue",
+            "description": (
+                "Calculate revenue received between two dates. "
+                "Revenue is based on actual payments received."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_date": {
+                        "type": "string",
+                        "description": "Start date in YYYY-MM-DD format.",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "End date in YYYY-MM-DD format.",
+                    },
+                },
+                "required": [
+                    "start_date",
+                    "end_date",
+                ],
+            },
+        },
+    },
+
+    {
+        "type": "function",
+        "function": {
+            "name": "get_outstanding_amount",
+            "description": (
+                "Calculate the total amount still outstanding "
+                "across all invoices."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },  
+        {
+        "type": "function",
+        "function": {
+            "name": "get_customer_outstanding_by_name",
+            "description": (
+                "Calculate the outstanding amount owed by a "
+                "specific customer. Use this when the user asks "
+                "how much a particular customer owes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "customer_name": {
+                        "type": "string",
+                        "description": (
+                            "The name of the customer."
+                        ),
+                    }
+                },
+                "required": ["customer_name"],
+            },
+        },
+    }
+]
+
+
+# --------------------------------------------------
+# Map tool names to actual Python functions.
+# --------------------------------------------------
+
+TOOL_FUNCTIONS = {
+    "get_invoice": get_invoice,
+    "search_invoices": search_invoices,
+    "search_invoices_above_amount": search_invoices_above_amount,
+    "search_customer": search_customer,
+    "get_revenue": get_revenue,
+    "get_outstanding_amount": get_outstanding_amount,
+    "get_customer_outstanding_by_name": get_customer_outstanding_by_name,
+}
